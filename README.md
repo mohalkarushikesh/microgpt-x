@@ -36,3 +36,7 @@ graph TD
 
     style Autograd fill:#f9f,stroke:#333,stroke-width:2px
     style Transformer_Layer fill:#e1f5fe,stroke:#01579b
+
+```
+
+<!--- <img width="1384" height="2640" alt="image" src="https://github.com/user-attachments/assets/094b5af0-5955-4c63-b346-f1bfc4565273" /> --->
