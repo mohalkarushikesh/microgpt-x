@@ -4,12 +4,14 @@ This file is the complete algorithm.
 Everything else is just efficiency.
 
 @karpathy
+
+https://vizuaraai.github.io/dna-of-a-transformer/
 """
 
 import os       # os.path.exists
 import math     # math.log, math.exp
 import random   # random.seed, random.choices, random.gauss, random.shuffle
-random.seed(42) # Let there be order among chaos
+random.seed(42) # A seed in machine learning is an integer value used to initialize a pseudo-random number generator, ensuring that random processes (like weight initialization or data shuffling) produce identical results across different runs. Setting a seed ensures reproducibility.
 
 # Let there be a Dataset `docs`: list[str] of documents (e.g. a list of names)
 # Check if the dataset exists locally, otherwise download it
@@ -27,6 +29,7 @@ print(f"num docs: {len(docs)}")
 # This is a character-level tokenizer: each unique character is assigned a unique ID
 uchars = sorted(set(''.join(docs))) # unique characters in the dataset become token ids 0..n-1
 
+
 # Define a Special Token (BOS) to signify the Start or End of a name
 # We place it at the end of our character list
 BOS = len(uchars) 
@@ -34,6 +37,7 @@ BOS = len(uchars)
 # The total vocabulary includes all unique characters plus the BOS token
 vocab_size = len(uchars) + 1 
 print(f"vocab size: {vocab_size}")
+
 # Let there be Autograd to recursively apply the chain rule through a computation graph
 class Value:
     __slots__ = ('data', 'grad', '_children', '_local_grads') # Python optimization for memory usage
@@ -81,15 +85,15 @@ class Value:
     def backward(self):
         # Build a topological sort to ensure we process nodes in the correct order
         # (A node's gradient is only finalized after all its parents are processed)
-        topo = []
-        visited = set()
-        def build_topo(v):
-            if v not in visited:
-                visited.add(v)
-                for child in v._children:
-                    build_topo(child)
-                topo.append(v)
-        build_topo(self)
+        topo = []                           # List to hold nodes in the order they should be processed
+        visited = set()                     # Set to track visited nodes, preventing duplicates or cycles
+        def build_topo(v):                  # Recursive helper to build a topological ordering
+            if v not in visited:            # Only process a node once
+                visited.add(v)              # Mark node as visited
+                for child in v.children:    # Traverse all children (dependencies)
+                    build_topo(child)       # Recursively build topo for each child
+                topo.append(v)              # Append node AFTER its children → ensures correct order
+        build_topo(self)                    # Start traversal from the current node
         
         # Seed the gradient of the root node (usually the Loss) to 1.0
         self.grad = 1
@@ -287,3 +291,4 @@ for sample_idx in range(20):
         sample.append(uchars[token_id])
     
     print(f"sample {sample_idx+1:2d}: {''.join(sample)}")
+    
