@@ -135,6 +135,17 @@ block_size = 16 # maximum context length of the attention window (note: the long
 n_head = 4      # number of attention heads
 head_dim = n_embd // n_head # derived dimension of each head
 
+"""
+Transformer Mini‑Model Parameters count = 4,192 
+- Token Embeddings (wte) → vocab_size × n_embd = 27 × 16 = 432
+- Positional Embeddings (wpe) → block_size × n_embd = 16 × 16 = 256
+- LM Head → vocab_size × n_embd = 27 × 16 = 432
+- Attention Weights → n_head × (n_embd × n_embd) = 4 × (16 × 16) = 1024
+- MLP (Feedforward) → n_embd × 4n_embd + 4n_embd × n_embd = 1024 + 1024 = 2048
+
+432 (wte) + 256 (wpe) + 432 (lm_head) + 1024 (attention) + 2048 (MLP) = 4192 parameters
+"""
+
 # Helper to create a matrix (list of lists) of Value objects initialized with small random weights
 matrix = lambda nout, nin, std=0.08: [[Value(random.gauss(0, std)) for _ in range(nin)] for _ in range(nout)]
 
@@ -246,11 +257,11 @@ def gpt(token_id, pos_id, keys, values):
     return logits
 # Let there be Adam, the blessed optimizer and its buffers
 learning_rate, beta1, beta2, eps_adam = 0.01, 0.85, 0.99, 1e-8
-m = [0.0] * len(params) # first moment buffer: stores the moving average of gradients (momentum)
-v = [0.0] * len(params) # second moment buffer: stores the moving average of squared gradients (scaling)
+m = [0.0] * len(params)         # first moment buffer: stores the moving average of gradients (momentum)
+v = [0.0] * len(params)         # second moment buffer: stores the moving average of squared gradients (scaling)
 
 # Repeat in sequence
-num_steps = 1000 # number of training steps
+num_steps = 1000                # number of training steps
 for step in range(num_steps):
 
     # Take single document, tokenize it, surround it with BOS special token on both sides
@@ -322,4 +333,3 @@ for sample_idx in range(20):
         sample.append(uchars[token_id])
     
     print(f"sample {sample_idx+1:2d}: {''.join(sample)}")
-    
