@@ -11,14 +11,14 @@ https://vizuaraai.github.io/dna-of-a-transformer/
 import os       # os.path.exists
 import math     # math.log, math.exp
 import random   # random.seed, random.choices, random.gauss, random.shuffle
-random.seed(42) # A seed in machine learning is an integer value used to initialize a pseudo-random number generator, ensuring that random processes (like weight initialization or data shuffling) produce identical results across different runs. Setting a seed ensures reproducibility.
+random.seed(42) # Sets the random seed for reproducibility. Ensures random processes (like weight initialization or shuffling) give the same results every run.
 
 # Let there be a Dataset `docs`: list[str] of documents (e.g. a list of names)
 # Check if the dataset exists locally, otherwise download it
-# if not os.path.exists('names.txt'):
-#     import urllib.request
-#     names_url = 'https://raw.githubusercontent.com/karpathy/makemore/master/names.txt'
-#     urllib.request.urlretrieve(names_url, 'names.txt')
+if not os.path.exists('names.txt'):
+    import urllib.request
+    names_url = 'https://raw.githubusercontent.com/karpathy/makemore/master/names.txt'
+    urllib.request.urlretrieve(names_url, 'names.txt')
     
 # Load names into a list and shuffle to ensure training batches aren't biased by alphabetical order
 docs = [line.strip() for line in open('names.txt', encoding='utf-8') if line.strip()]
@@ -28,7 +28,6 @@ print(f"num docs: {len(docs)}")
 # Let there be a Tokenizer to translate strings to sequences of integers ("tokens") and back
 # This is a character-level tokenizer: each unique character is assigned a unique ID
 uchars = sorted(set(''.join(docs))) # unique characters in the dataset become token ids 0..n-1
-
 
 # Define a Special Token (BOS) to signify the Start or End of a name
 # We place it at the end of our character list
@@ -74,15 +73,39 @@ class Value:
         # Derivative is 1 if x > 0, else 0
         return Value(max(0, self.data), (self,), (float(self.data > 0),))
     
-    def __neg__(self): return self * -1
-    def __radd__(self, other): return self + other
-    def __sub__(self, other): return self + (-other)
-    def __rsub__(self, other): return other + (-self)
-    def __rmul__(self, other): return self * other
-    def __truediv__(self, other): return self * other**-1
-    def __rtruediv__(self, other): return other * self**-1
+    def __neg__(self): 
+        return self * -1
+        # Defines unary negation (-x). Reuses multiplication by -1.
 
-    def backward(self):
+    def __radd__(self, other): 
+        return self + other
+        # Handles right-side addition (other + self) when 'other' doesn’t know how to add a Value.
+        # Example: 2 + Value(3) calls Value.__radd__.
+
+    def __sub__(self, other): 
+        return self + (-other)
+        # Defines subtraction (self - other) by adding the negation of 'other'.
+
+    def __rsub__(self, other): 
+        return other + (-self)
+        # Handles right-side subtraction (other - self).
+        # Example: 2 - Value(3).
+
+    def __rmul__(self, other): 
+        return self * other
+        # Handles right-side multiplication (other * self).
+        # Example: 2 * Value(3).
+
+    def __truediv__(self, other): 
+        return self * other**-1
+        # Defines division (self / other) by multiplying with reciprocal (other**-1).
+
+    def __rtruediv__(self, other): 
+        return other * self**-1
+        # Handles right-side division (other / self).
+        # Example: 2 / Value(3).
+
+    def backward(self): 
         # Build a topological sort to ensure we process nodes in the correct order
         # (A node's gradient is only finalized after all its parents are processed)
         topo = []                           # List to hold nodes in the order they should be processed
@@ -117,21 +140,27 @@ matrix = lambda nout, nin, std=0.08: [[Value(random.gauss(0, std)) for _ in rang
 
 # Initialize the primary embedding tables and the final output head
 state_dict = {
-    'wte': matrix(vocab_size, n_embd), # Word Token Embeddings
-    'wpe': matrix(block_size, n_embd), # Word Position Embeddings
-    'lm_head': matrix(vocab_size, n_embd) # Language Model Head (logits over vocabulary)
+    'wte': matrix(vocab_size, n_embd),          # Word Token Embeddings
+    'wpe': matrix(block_size, n_embd),          # Word Position Embeddings
+    'lm_head': matrix(vocab_size, n_embd)       # Language Model Head (logits over vocabulary)
 }
 
 # Populate the layers with Attention and MLP weights
 for i in range(n_layer):
-    # Projection matrices for Queries, Keys, and Values
-    state_dict[f'layer{i}.attn_wq'] = matrix(n_embd, n_embd)
-    state_dict[f'layer{i}.attn_wk'] = matrix(n_embd, n_embd)
-    state_dict[f'layer{i}.attn_wv'] = matrix(n_embd, n_embd)
+    # --- Attention Weights ---
+    # Projection matrices for Queries, Keys, and Values (Q, K, V)
+    state_dict[f'layer{i}.attn_wq'] = matrix(n_embd, n_embd)   # Query projection
+    state_dict[f'layer{i}.attn_wk'] = matrix(n_embd, n_embd)   # Key projection
+    state_dict[f'layer{i}.attn_wv'] = matrix(n_embd, n_embd)   # Value projection
+
     # Output projection for the combined attention heads
     state_dict[f'layer{i}.attn_wo'] = matrix(n_embd, n_embd)
-    # Feed-forward network (MLP) weights; usually 4x expansion in the hidden layer
+
+    # --- Feed-Forward Network (MLP) Weights ---
+    # First linear layer expands hidden dimension (typically 4x larger)
     state_dict[f'layer{i}.mlp_fc1'] = matrix(4 * n_embd, n_embd)
+
+    # Second linear layer projects back down to embedding dimension
     state_dict[f'layer{i}.mlp_fc2'] = matrix(n_embd, 4 * n_embd)
 
 # Flatten all Value objects into a single list for the optimizer to iterate over
@@ -141,22 +170,24 @@ print(f"num params: {len(params)}")
 # Define the model architecture: a function mapping tokens and parameters to logits
 # Follow GPT-2, with minor differences: layernorm -> rmsnorm, no biases, GeLU -> ReLU
 
-def linear(x, w):
-    # Standard matrix-vector multiplication (y = Wx)
-    return [sum(wi * xi for wi, xi in zip(wo, x)) for wo in w]
+def linear(x, w):                                   # x → a vector (list of numbers) and w → a matrix (list of row vectors).
+    # standard matrix-vector multiplication : y = W x
+    return [sum(wi * xi for wi, xi in zip(wo, x))   # computes the dot product of row wo with vector x.
+            for wo in w]                            # take each row wo of the matrix.
+    # The list comprehension collects all these dot products, one per row of w. The result is a new vector y.
 
 def softmax(logits):
-    # Stabilized softmax to convert logits into a probability distribution
-    max_val = max(val.data for val in logits) # Subtract max for numerical stability
-    exps = [(val - max_val).exp() for val in logits]
-    total = sum(exps)
-    return [e / total for e in exps]
+    # standardized softmax to convert logits into probability distribution 
+    max_val = max(val.data for val in logits)           # Find max value - trick for numerical stability
+    exps = [(val - max_val).exp() for val in logits]    # Exponentiate shifted values
+    total = sum(exps)                                   # Sum of exponentials - denominator
+    return [e/total for e in exps]                      # Normalize to probabilities
 
 def rmsnorm(x):
-    # Root Mean Square Normalization: scales inputs to stabilize training
-    ms = sum(xi * xi for xi in x) / len(x)
-    scale = (ms + 1e-5) ** -0.5 # 1e-5 prevents division by zero
-    return [xi * scale for xi in x]
+    # Root Mean Square Normalization - scales inputs to stabilize training
+    ms = sum(xi * xi for xi in x) / len(x)   # mean of squared values (RMS base)
+    scale = (ms + 1e-5) ** -0.5              # inverse square root of mean square - to normalize magnitude; 1e-5 avoids division by zero
+    return [xi * scale for xi in x]          # scale each input by this factor
 
 def gpt(token_id, pos_id, keys, values):
     # 1. Embedding Lookup
